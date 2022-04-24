@@ -1,19 +1,19 @@
-import matplotlib.pyplot as plt
+import os
+
 import h5py
-import numpy as np
-from mpl_toolkits.axes_grid1.inset_locator import zoomed_inset_axes, mark_inset
-from matplotlib.ticker import StrMethodFormatter
-import os
-from utils.model_utils import get_log_path, METRICS
-import seaborn as sns
-import string
 import matplotlib.colors as mcolors
-import os
-COLORS=list(mcolors.TABLEAU_COLORS)
-MARKERS=["o", "v", "s", "*", "x", "P"]
+import matplotlib.pyplot as plt
+import numpy as np
+import seaborn as sns
+
+from utils.model_utils import get_log_path, METRICS
+
+COLORS = list(mcolors.TABLEAU_COLORS)
+MARKERS = ["o", "v", "s", "*", "x", "P"]
 
 plt.rcParams.update({'font.size': 14})
-n_seeds=3
+n_seeds = 3
+
 
 def load_results(args, algorithm, seed):
     alg = get_log_path(args, algorithm, seed, args.gen_batch_size)
@@ -39,10 +39,11 @@ def get_label_name(name):
         name = 'FedAvg'
     return name
 
+
 def plot_results(args, algorithms):
     n_seeds = args.times
     dataset_ = args.dataset.split('-')
-    sub_dir = dataset_[0] + "/" + dataset_[2] # e.g. Mnist/ratio0.5
+    sub_dir = dataset_[0] + "/" + dataset_[2]  # e.g. Mnist/ratio0.5
     os.system("mkdir -p figs/{}".format(sub_dir))  # e.g. figs/Mnist/ratio0.5
     plt.figure(1, figsize=(5, 5))
     TOP_N = 5
@@ -52,10 +53,11 @@ def plot_results(args, algorithms):
         ######### plot test accuracy ############
         metrics = [load_results(args, algorithm, seed) for seed in range(n_seeds)]
         all_curves = np.concatenate([metrics[seed]['glob_acc'] for seed in range(n_seeds)])
-        top_accs =  np.concatenate([np.sort(metrics[seed]['glob_acc'])[-TOP_N:] for seed in range(n_seeds)] )
+        top_accs = np.concatenate([np.sort(metrics[seed]['glob_acc'])[-TOP_N:] for seed in range(n_seeds)])
         acc_avg = np.mean(top_accs)
         acc_std = np.std(top_accs)
-        info = 'Algorithm: {:<10s}, Accuracy = {:.2f} %, deviation = {:.2f}'.format(algo_name, acc_avg * 100, acc_std * 100)
+        info = 'Algorithm: {:<10s}, Accuracy = {:.2f} %, deviation = {:.2f}'.format(algo_name, acc_avg * 100,
+                                                                                    acc_std * 100)
         print(info)
         length = len(all_curves) // n_seeds
         sns.lineplot(
@@ -71,11 +73,11 @@ def plot_results(args, algorithms):
     plt.grid()
     plt.title(dataset_[0] + ' Test Accuracy')
     plt.xlabel('Epoch')
-    max_acc = np.max([max_acc, np.max(all_curves) ]) + 4e-2
+    max_acc = np.max([max_acc, np.max(all_curves)]) + 4e-2
 
     if args.min_acc < 0:
         alpha = 0.7
-        min_acc = np.max(all_curves) * alpha + np.min(all_curves) * (1-alpha)
+        min_acc = np.max(all_curves) * alpha + np.min(all_curves) * (1 - alpha)
     else:
         min_acc = args.min_acc
     plt.ylim(min_acc, max_acc)

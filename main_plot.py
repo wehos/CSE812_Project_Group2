@@ -1,13 +1,10 @@
 #!/usr/bin/env python
-import h5py
-import matplotlib.pyplot as plt
-import numpy as np
-import importlib
-import random
-import os
 import argparse
-from utils.plot_utils import *
+
 import torch
+
+from utils.plot_utils import *
+
 torch.manual_seed(0)
 
 if __name__ == "__main__":

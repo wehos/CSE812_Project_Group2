@@ -1,6 +1,8 @@
 import torch
-from FLAlgorithms.users.userbase import User
+
 from FLAlgorithms.optimizers.fedoptimizer import FedProxOptimizer
+from FLAlgorithms.users.userbase import User
+
 
 class UserFedProx(User):
     def __init__(self, args, id, model, train_data, test_data, use_adam=False):
@@ -15,7 +17,7 @@ class UserFedProx(User):
 
     def clean_up_counts(self):
         del self.label_counts
-        self.label_counts = {int(label):1 for label in range(self.unique_labels)}
+        self.label_counts = {int(label): 1 for label in range(self.unique_labels)}
 
     def train(self, glob_iter, lr_decay=True, count_labels=False):
         self.clean_up_counts()
@@ -25,14 +27,14 @@ class UserFedProx(User):
         for epoch in range(self.local_epochs):
             self.model.train()
             for i in range(self.K):
-                result =self.get_next_train_batch(count_labels=count_labels)
+                result = self.get_next_train_batch(count_labels=count_labels)
                 X, y = result['X'], result['y']
                 if count_labels:
                     self.update_label_counts(result['labels'], result['counts'])
 
                 self.optimizer.zero_grad()
-                output=self.model(X)['output']
-                loss=self.loss(output, y)
+                output = self.model(X)['output']
+                loss = self.loss(output, y)
                 loss.backward()
                 self.optimizer.step(self.local_model)
         if lr_decay:
