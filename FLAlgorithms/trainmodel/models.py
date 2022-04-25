@@ -1,8 +1,8 @@
 import torch.nn as nn
 import torch.nn.functional as F
+
 from utils.model_config import CONFIGS_
 
-import collections
 
 #################################
 ##### Neural Network model #####
@@ -13,15 +13,15 @@ class Net(nn.Module):
         # define network layers
         print("Creating model for {}".format(dataset))
         self.dataset = dataset
-        configs, input_channel, self.output_dim, self.hidden_dim, self.latent_dim=CONFIGS_[dataset]
+        configs, input_channel, self.output_dim, self.hidden_dim, self.latent_dim = CONFIGS_[dataset]
         print('Network configs:', configs)
-        self.named_layers, self.layers, self.layer_names =self.build_network(
+        self.named_layers, self.layers, self.layer_names = self.build_network(
             configs, input_channel, self.output_dim)
         self.n_parameters = len(list(self.parameters()))
         self.n_share_parameters = len(self.get_encoder())
 
     def get_number_of_parameters(self):
-        pytorch_total_params=sum(p.numel() for p in self.parameters() if p.requires_grad)
+        pytorch_total_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
         return pytorch_total_params
 
     def build_network(self, configs, input_channel, output_dim):
@@ -31,10 +31,10 @@ class Net(nn.Module):
         kernel_size, stride, padding = 3, 2, 1
         for i, x in enumerate(configs):
             if x == 'F':
-                layer_name='flatten{}'.format(i)
-                layer=nn.Flatten(1)
-                layers+=[layer]
-                layer_names+=[layer_name]
+                layer_name = 'flatten{}'.format(i)
+                layer = nn.Flatten(1)
+                layers += [layer]
+                layer_names += [layer_name]
             elif x == 'M':
                 pool_layer = nn.MaxPool2d(kernel_size=2, stride=2)
                 layer_name = 'pool{}'.format(i)
@@ -50,7 +50,7 @@ class Net(nn.Module):
                 named_layers[bn_name] = [bn_layer.weight, bn_layer.bias]
 
                 relu_name = 'relu{}'.format(i)
-                relu_layer = nn.ReLU(inplace=True)# no parameters to learn
+                relu_layer = nn.ReLU(inplace=True)  # no parameters to learn
 
                 layers += [cnn_layer, bn_layer, relu_layer]
                 layer_names += [cnn_name, bn_name, relu_name]
@@ -70,12 +70,11 @@ class Net(nn.Module):
         named_layers[fc_layer_name] = [fc_layer.weight, fc_layer.bias]
         return named_layers, layers, layer_names
 
-
     def get_parameters_by_keyword(self, keyword='encode'):
-        params=[]
+        params = []
         for name, layer in zip(self.layer_names, self.layers):
             if keyword in name:
-                #layer = self.layers[name]
+                # layer = self.layers[name]
                 params += [layer.weight, layer.bias]
         return params
 
@@ -91,16 +90,16 @@ class Net(nn.Module):
     def get_learnable_params(self):
         return self.get_encoder() + self.get_decoder()
 
-    def forward(self, x, start_layer_idx = 0, logit=False):
+    def forward(self, x, start_layer_idx=0, logit=False):
         """
         :param x:
         :param logit: return logit vector before the last softmax layer
         :param start_layer_idx: if 0, conduct normal forward; otherwise, forward from the last few layers (see mapping function)
         :return:
         """
-        if start_layer_idx < 0: #
+        if start_layer_idx < 0:  #
             return self.mapping(x, start_layer_idx=start_layer_idx, logit=logit)
-        restults={}
+        restults = {}
         z = x
         for idx in range(start_layer_idx, len(self.layers)):
             layer_name = self.layer_names[idx]
@@ -112,7 +111,7 @@ class Net(nn.Module):
         else:
             restults['output'] = z
         if logit:
-            restults['logit']=z
+            restults['logit'] = z
         return restults
 
     def mapping(self, z_input, start_layer_idx=-1, logit=True):
@@ -122,7 +121,7 @@ class Net(nn.Module):
             layer = self.layers[layer_idx]
             z = layer(z)
         if self.output_dim > 1:
-            out=F.log_softmax(z, dim=1)
+            out = F.log_softmax(z, dim=1)
         result = {'output': out}
         if logit:
             result['logit'] = z

@@ -1,19 +1,20 @@
+import copy
+import os
+
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-import os
-import json
 from torch.utils.data import DataLoader
-import numpy as np
-import copy
-from utils.model_utils import get_dataset_name
-from utils.model_config import RUNCONFIGS
+
 from FLAlgorithms.optimizers.fedoptimizer import pFedIBOptimizer
+from utils.model_config import RUNCONFIGS
+from utils.model_utils import get_dataset_name
+
 
 class User:
     """
     Base class for users in federated learning.
     """
+
     def __init__(
             self, args, id, model, train_data, test_data, use_adam=False):
         self.model = copy.deepcopy(model[0])
@@ -29,9 +30,9 @@ class User:
         self.algorithm = args.algorithm
         self.K = args.K
         self.dataset = args.dataset
-        #self.trainloader = DataLoader(train_data, self.batch_size, drop_last=False)
+        # self.trainloader = DataLoader(train_data, self.batch_size, drop_last=False)
         self.trainloader = DataLoader(train_data, self.batch_size, shuffle=True, drop_last=True)
-        self.testloader =  DataLoader(test_data, self.batch_size, drop_last=False)
+        self.testloader = DataLoader(test_data, self.batch_size, drop_last=False)
         self.testloaderfull = DataLoader(test_data, self.test_samples)
         self.trainloaderfull = DataLoader(train_data, self.train_samples)
         self.iter_trainloader = iter(self.trainloader)
@@ -49,7 +50,7 @@ class User:
 
         self.init_loss_fn()
         if use_adam:
-            self.optimizer=torch.optim.Adam(
+            self.optimizer = torch.optim.Adam(
                 params=self.model.parameters(),
                 lr=self.learning_rate, betas=(0.9, 0.999),
                 eps=1e-08, weight_decay=1e-2, amsgrad=False)
@@ -58,23 +59,20 @@ class User:
         self.lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=self.optimizer, gamma=0.99)
         self.label_counts = {}
 
-
-
-
     def init_loss_fn(self):
-        self.loss=nn.NLLLoss()
+        self.loss = nn.NLLLoss()
         self.dist_loss = nn.MSELoss()
-        self.ensemble_loss=nn.KLDivLoss(reduction="batchmean")
+        self.ensemble_loss = nn.KLDivLoss(reduction="batchmean")
         self.ce_loss = nn.CrossEntropyLoss()
 
-    def set_parameters(self, model,beta=1):
+    def set_parameters(self, model, beta=1):
         for old_param, new_param, local_param in zip(self.model.parameters(), model.parameters(), self.local_model):
             if beta == 1:
                 old_param.data = new_param.data.clone()
                 local_param.data = new_param.data.clone()
             else:
-                old_param.data = beta * new_param.data.clone() + (1 - beta)  * old_param.data.clone()
-                local_param.data = beta * new_param.data.clone() + (1-beta) * local_param.data.clone()
+                old_param.data = beta * new_param.data.clone() + (1 - beta) * old_param.data.clone()
+                local_param.data = beta * new_param.data.clone() + (1 - beta) * local_param.data.clone()
 
     def set_prior_decoder(self, model, beta=1):
         for new_param, local_param in zip(model.personal_layers, self.prior_decoder):
@@ -82,7 +80,6 @@ class User:
                 local_param.data = new_param.data.clone()
             else:
                 local_param.data = beta * new_param.data.clone() + (1 - beta) * local_param.data.clone()
-
 
     def set_prior(self, model):
         for new_param, local_param in zip(model.get_encoder() + model.get_decoder(), self.prior_params):
@@ -106,18 +103,17 @@ class User:
             param.detach()
         return self.model.parameters()
 
-
     def clone_model_paramenter(self, param, clone_param):
         with torch.no_grad():
             for param, clone_param in zip(param, clone_param):
                 clone_param.data = param.data.clone()
         return clone_param
-    
+
     def get_updated_parameters(self):
         return self.local_weight_updated
-    
+
     def update_parameters(self, new_params, keyword='all'):
-        for param , new_param in zip(self.model.parameters(), new_params):
+        for param, new_param in zip(self.model.parameters(), new_params):
             param.data = new_param.data.clone()
 
     def get_grads(self):
@@ -134,12 +130,12 @@ class User:
         test_acc = 0
         loss = 0
         for x, y in self.testloaderfull:
+            x = x.to('cuda:3')
+            y = y.to('cuda:3')
             output = self.model(x)['output']
             loss += self.loss(output, y)
             test_acc += (torch.sum(torch.argmax(output, dim=1) == y)).item()
         return test_acc, loss, y.shape[0]
-
-
 
     def test_personalized_model(self):
         self.model.eval()
@@ -150,12 +146,11 @@ class User:
             output = self.model(x)['output']
             loss += self.loss(output, y)
             test_acc += (torch.sum(torch.argmax(output, dim=1) == y)).item()
-            #@loss += self.loss(output, y)
-            #print(self.id + ", Test Accuracy:", test_acc / y.shape[0] )
-            #print(self.id + ", Test Loss:", loss)
+            # @loss += self.loss(output, y)
+            # print(self.id + ", Test Accuracy:", test_acc / y.shape[0] )
+            # print(self.id + ", Test Loss:", loss)
         self.update_parameters(self.local_model)
         return test_acc, y.shape[0], loss
-
 
     def get_next_train_batch(self, count_labels=True):
         try:
@@ -167,7 +162,7 @@ class User:
             (X, y) = next(self.iter_trainloader)
         result = {'X': X, 'y': y}
         if count_labels:
-            unique_y, counts=torch.unique(y, return_counts=True)
+            unique_y, counts = torch.unique(y, return_counts=True)
             unique_y = unique_y.detach().numpy()
             counts = counts.detach().numpy()
             result['labels'] = unique_y
@@ -193,7 +188,7 @@ class User:
     def load_model(self):
         model_path = os.path.join("models", self.dataset)
         self.model = torch.load(os.path.join(model_path, "server" + ".pt"))
-    
+
     @staticmethod
     def model_exists():
         return os.path.exists(os.path.join("models", "server" + ".pt"))
