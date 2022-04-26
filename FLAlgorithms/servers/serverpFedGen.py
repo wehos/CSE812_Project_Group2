@@ -9,7 +9,7 @@ from torchvision.utils import save_image
 
 from FLAlgorithms.servers.serverbase import Server
 from FLAlgorithms.users.userpFedGen import UserpFedGen
-from utils.model_utils import read_data, read_user_data, aggregate_user_data, create_generative_model
+from utils.model_utils import read_data, read_user_data, aggregate_user_data, create_generative_model, create_model
 
 MIN_SAMPLES_PER_LABEL = 1
 
@@ -24,7 +24,14 @@ class FedGen(Server):
         clients = data[0]
         total_users = len(clients)
         self.total_test_samples = 0
-        self.local = 'local' in self.algorithm.lower()
+        
+        # ===========Block edited by Hongzhi
+        self.local = True#'local' in self.algorithm.lower()
+        self.ensemble_alpha = 1
+        self.ensemble_beta = 0
+        self.ensemble_eta = 0.5
+        # ===========Block end
+        
         self.use_adam = 'adam' in self.algorithm.lower()
 
         self.early_stop = 20  # stop using generated samples after 20 local epochs
@@ -63,6 +70,11 @@ class FedGen(Server):
             self.total_train_samples += len(train_data)
             self.total_test_samples += len(test_data)
             id, train, test = read_user_data(i, data, dataset=args.dataset)
+            
+            # ===========Block edited by Hongzhi
+            model = create_model(args.model, args.dataset, args.algorithm, client = i//10)
+            model[0].to('cuda:3')
+            # ===========Block end
             user = UserpFedGen(
                 args, id, model, self.generative_model,
                 train_data, test_data,
@@ -105,7 +117,9 @@ class FedGen(Server):
                 latent_layer_idx=self.latent_layer_idx,
                 verbose=True
             )
-            self.aggregate_parameters()
+            
+            if not self.local:
+                self.aggregate_parameters()
             curr_timestamp = time.time()  # log  server-agg end time
             agg_time = curr_timestamp - self.timestamp
             self.metrics['server_agg_time'].append(agg_time)
