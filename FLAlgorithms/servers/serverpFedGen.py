@@ -72,7 +72,7 @@ class FedGen(Server):
             id, train, test = read_user_data(i, data, dataset=args.dataset)
             
             # ===========Block edited by Hongzhi
-            model = create_model(args.model, args.dataset, args.algorithm, client = i//10)
+            model = create_model(args.model, args.dataset, args.algorithm, client = 0)
             model[0].to('cuda:3')
             # ===========Block end
             user = UserpFedGen(
