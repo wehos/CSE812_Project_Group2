@@ -215,11 +215,8 @@ def create_generative_model(dataset, algorithm='', model='cnn', embedding=False)
     return Generator(passed_dataset, model=model, embedding=embedding, latent_layer_idx=-1).to('cpu')
 
 
-def create_model(model, dataset, algorithm, client = None):
-    if client is not None:
-        passed_dataset = get_dataset_name(dataset) + '_' + str(client)
-    else:
-        passed_dataset = get_dataset_name(dataset)
+def create_model(model, dataset, algorithm):
+    passed_dataset = get_dataset_name(dataset)
     model = Net(passed_dataset, model), model
     return model
 
