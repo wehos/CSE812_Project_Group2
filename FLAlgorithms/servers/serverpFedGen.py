@@ -3,6 +3,7 @@ import os
 import time
 
 import numpy as np
+import ray
 import torch
 import torch.nn.functional as F
 from torchvision.utils import save_image
@@ -12,7 +13,6 @@ from FLAlgorithms.users.userpFedGen import UserpFedGen
 from utils.model_utils import read_data, read_user_data, aggregate_user_data, create_generative_model, create_model
 
 MIN_SAMPLES_PER_LABEL = 1
-
 
 class FedGen(Server):
     def __init__(self, args, model, seed):
@@ -70,12 +70,11 @@ class FedGen(Server):
             self.total_train_samples += len(train_data)
             self.total_test_samples += len(test_data)
             id, train, test = read_user_data(i, data, dataset=args.dataset)
-            
             # ===========Block edited by Hongzhi
             model = create_model(args.model, args.dataset, args.algorithm, client = 0)
-            model[0].to('cuda:3')
+            model[0].to('cpu')
             # ===========Block end
-            user = UserpFedGen(
+            user = UserpFedGen.remote(
                 args, id, model, self.generative_model,
                 train_data, test_data,
                 self.available_labels, self.latent_layer_idx, label_info,
@@ -95,15 +94,17 @@ class FedGen(Server):
             self.evaluate()
             chosen_verbose_user = np.random.randint(0, len(self.users))
             self.timestamp = time.time()  # log user-training start time
+            tasks = []
             for user_id, user in zip(self.user_idxs, self.selected_users):  # allow selected users to train
                 verbose = user_id == chosen_verbose_user
                 # perform regularization using generated samples after the first communication round
-                user.train(
+                tasks.append(user.train.remote(
                     glob_iter,
                     personalized=self.personalized,
                     early_stop=self.early_stop,
                     verbose=verbose and glob_iter > 0,
-                    regularization=glob_iter > 0)
+                    regularization=glob_iter > 0))
+            ray.get(tasks)
             curr_timestamp = time.time()  # log  user-training end time
             train_time = (curr_timestamp - self.timestamp) / len(self.selected_users)
             self.metrics['user_train_time'].append(train_time)
@@ -117,9 +118,7 @@ class FedGen(Server):
                 latent_layer_idx=self.latent_layer_idx,
                 verbose=True
             )
-            
-            if not self.local:
-                self.aggregate_parameters()
+            self.aggregate_parameters()
             curr_timestamp = time.time()  # log  server-agg end time
             agg_time = curr_timestamp - self.timestamp
             self.metrics['server_agg_time'].append(agg_time)
@@ -148,7 +147,7 @@ class FedGen(Server):
             for i in range(n_iters):
                 self.generative_optimizer.zero_grad()
                 y = np.random.choice(self.qualified_labels, batch_size)
-                y_input = torch.LongTensor(y).to('cuda:3')
+                y_input = torch.LongTensor(y).to('cpu')
                 ## feed to generator
                 gen_result = self.generative_model(y_input, latent_layer_idx=latent_layer_idx, verbose=True)
                 # get approximation of Z( latent) if latent set to True, X( raw image) otherwise
@@ -162,17 +161,18 @@ class FedGen(Server):
                 teacher_loss = 0
                 teacher_logit = 0
                 for user_idx, user in enumerate(self.selected_users):
-                    user.model.eval()
+                    model = ray.get(user._get_model.remote())
+                    model.eval()
                     weight = self.label_weights[y][:, user_idx].reshape(-1, 1)
                     expand_weight = np.tile(weight, (1, self.unique_labels))
-                    user_result_given_gen = user.model(gen_output, start_layer_idx=latent_layer_idx, logit=True)
+                    user_result_given_gen = model(gen_output, start_layer_idx=latent_layer_idx, logit=True)
                     user_output_logp_ = F.log_softmax(user_result_given_gen['logit'], dim=1)
                     teacher_loss_ = torch.mean(
                         self.generative_model.crossentropy_loss(user_output_logp_, y_input) *
-                        torch.tensor(weight, dtype=torch.float32).to('cuda:3'))
+                        torch.tensor(weight, dtype=torch.float32).to('cpu'))
                     teacher_loss += teacher_loss_
                     teacher_logit += user_result_given_gen['logit'] * torch.tensor(expand_weight,
-                                                                                   dtype=torch.float32).to('cuda:3')
+                                                                                   dtype=torch.float32).to('cpu')
 
                 ######### get student loss ############
                 student_output = student_model(gen_output, start_layer_idx=latent_layer_idx, logit=True)
@@ -207,7 +207,8 @@ class FedGen(Server):
         for label in range(self.unique_labels):
             weights = []
             for user in self.selected_users:
-                weights.append(user.label_counts[label])
+                label_counts = ray.get(user._get_label_counts.remote())
+                weights.append(label_counts[label])
             if np.max(weights) > MIN_SAMPLES_PER_LABEL:
                 qualified_labels.append(label)
             # uniform
@@ -223,7 +224,7 @@ class FedGen(Server):
         path = f'images/{self.algorithm}-{self.dataset}-iter{glob_iter}.png'
         y = self.available_labels
         y = np.repeat(y, repeats=repeats, axis=0)
-        y_input = torch.tensor(y).to('cuda:3')
+        y_input = torch.tensor(y).to('cpu')
         generator.eval()
         images = generator(y_input, latent=False)['output']  # 0,1,..,K, 0,1,...,K
         images = images.view(repeats, -1, *images.shape[1:])

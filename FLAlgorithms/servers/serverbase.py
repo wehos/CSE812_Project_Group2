@@ -3,6 +3,7 @@ import os
 
 import h5py
 import numpy as np
+import ray
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -75,16 +76,17 @@ class Server:
             users = self.selected_users
         for user in users:
             if mode == 'all':  # share only subset of parameters
-                user.set_parameters(self.model, beta=beta)
+                ray.get(user.set_parameters.remote(self.model, beta=beta))
             else:  # share all parameters
-                user.set_shared_parameters(self.model, mode=mode)
+                ray.get(user.set_shared_parameters.remote(self.model, mode=mode))
 
     def add_parameters(self, user, ratio, partial=False):
+        model = ray.get(user._get_model.remote())
         if partial:
-            for server_param, user_param in zip(self.model.get_shared_parameters(), user.model.get_shared_parameters()):
+            for server_param, user_param in zip(self.model.get_shared_parameters(), model.get_shared_parameters()):
                 server_param.data = server_param.data + user_param.data.clone() * ratio
         else:
-            for server_param, user_param in zip(self.model.parameters(), user.model.parameters()):
+            for server_param, user_param in zip(self.model.parameters(), model.parameters()):
                 server_param.data = server_param.data + user_param.data.clone() * ratio
 
     def aggregate_parameters(self, partial=False):
@@ -97,9 +99,9 @@ class Server:
                 param.data = torch.zeros_like(param.data)
         total_train = 0
         for user in self.selected_users:
-            total_train += user.train_samples
+            total_train += ray.get(user._get_train_samples.remote())
         for user in self.selected_users:
-            self.add_parameters(user, user.train_samples / total_train, partial=partial)
+            self.add_parameters(user, ray.get(user._get_train_samples.remote()) / total_train, partial=partial)
 
     def save_model(self):
         model_path = os.path.join("models", self.dataset)
@@ -155,11 +157,11 @@ class Server:
         losses = []
         users = self.selected_users if selected else self.users
         for c in users:
-            ct, c_loss, ns = c.test()
+            ct, c_loss, ns = ray.get(c.test.remote())
             tot_correct.append(ct * 1.0)
             num_samples.append(ns)
             losses.append(c_loss)
-        ids = [c.id for c in self.users]
+        ids = [ray.get(c._get_id.remote()) for c in self.users]
 
         return ids, num_samples, tot_correct, losses
 
@@ -198,8 +200,9 @@ class Server:
             target_logit_output = 0
             for user in users:
                 # get user logit
-                user.model.eval()
-                user_result = user.model(x, logit=True)
+                model = ray.get(user._get_model.remote())
+                model.eval()
+                user_result = model(x, logit=True)
                 target_logit_output += user_result['logit']
             target_logp = F.log_softmax(target_logit_output, dim=1)
             test_acc += torch.sum(torch.argmax(target_logp, dim=1) == y)  # (torch.sum().item()
