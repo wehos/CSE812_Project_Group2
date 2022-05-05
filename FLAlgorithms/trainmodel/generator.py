@@ -55,7 +55,7 @@ class Generator(nn.Module):
         :param verbose: also return the sampled Gaussian noise if verbose = True
         :return: a dictionary of output information.
         """
-        labels = labels.to('cuda:3')
+        labels = labels.to('cpu')
         result = {}
         batch_size = labels.shape[0]
         eps = torch.rand((batch_size, self.noise_dim))  # sampling from Gaussian
@@ -69,7 +69,7 @@ class Generator(nn.Module):
             # labels = labels.view
             labels_int64 = labels.type(torch.LongTensor)
             y_input.scatter_(1, labels_int64.view(-1, 1), 1)
-        z = torch.cat((eps, y_input), dim=1).to('cuda:3')
+        z = torch.cat((eps, y_input), dim=1).to('cpu')
         ### FC layers
         for layer in self.fc_layers:
             z = layer(z)
@@ -217,4 +217,4 @@ class DiversityLoss(nn.Module):
             layer = layer.view((layer.size(0), -1))
         layer_dist = self.pairwise_distance(layer, how=self.metric)
         noise_dist = self.pairwise_distance(noises, how='l2')
-        return torch.exp(torch.mean(-noise_dist.to('cuda:3') * layer_dist))
+        return torch.exp(torch.mean(-noise_dist.to('cpu') * layer_dist))

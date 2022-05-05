@@ -13,7 +13,7 @@ from utils.model_utils import create_model
 
 def create_server_n_user(args, i):
     model = create_model(args.model, args.dataset, args.algorithm)
-    model[0].to('cuda:3')
+    model[0].to('cpu')
     if 'FedAvg' in args.algorithm:
         server = FedAvg(args, model, i)
     elif 'FedGen' in args.algorithm:
@@ -68,7 +68,7 @@ if __name__ == "__main__":
     parser.add_argument("--num_users", type=int, default=20, help="Number of Users per round")
     parser.add_argument("--K", type=int, default=1, help="Computation steps")
     parser.add_argument("--times", type=int, default=3, help="running time")
-    parser.add_argument("--device", type=str, default="cuda:3", choices=["cpu", "cuda"], help="run device (cpu | cuda)")
+    parser.add_argument("--device", type=str, default="cuda:7", choices=["cpu", "cuda"], help="run device (cpu | cuda)")
     parser.add_argument("--result_path", type=str, default="results", help="directory path to save results")
 
     args = parser.parse_args()

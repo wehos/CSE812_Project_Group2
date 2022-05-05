@@ -59,6 +59,51 @@ class User:
         self.lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=self.optimizer, gamma=0.99)
         self.label_counts = {}
 
+    def update(
+            self, args, id, model, train_data, test_data, use_adam=False):
+        self.model = copy.deepcopy(model[0])
+        self.model_name = model[1]
+        self.id = id  # integer
+        self.train_samples = len(train_data)
+        self.test_samples = len(test_data)
+        self.batch_size = args.batch_size
+        self.learning_rate = args.learning_rate
+        self.beta = args.beta
+        self.lamda = args.lamda
+        self.local_epochs = args.local_epochs
+        self.algorithm = args.algorithm
+        self.K = args.K
+        self.dataset = args.dataset
+        # self.trainloader = DataLoader(train_data, self.batch_size, drop_last=False)
+        self.trainloader = DataLoader(train_data, self.batch_size, shuffle=True, drop_last=True)
+        self.testloader = DataLoader(test_data, self.batch_size, drop_last=False)
+        self.testloaderfull = DataLoader(test_data, self.test_samples)
+        self.trainloaderfull = DataLoader(train_data, self.train_samples)
+        self.iter_trainloader = iter(self.trainloader)
+        self.iter_testloader = iter(self.testloader)
+        dataset_name = get_dataset_name(self.dataset)
+        self.unique_labels = RUNCONFIGS[dataset_name]['unique_labels']
+        self.generative_alpha = RUNCONFIGS[dataset_name]['generative_alpha']
+        self.generative_beta = RUNCONFIGS[dataset_name]['generative_beta']
+
+        # those parameters are for personalized federated learning.
+        self.local_model = copy.deepcopy(list(self.model.parameters()))
+        self.personalized_model_bar = copy.deepcopy(list(self.model.parameters()))
+        self.prior_decoder = None
+        self.prior_params = None
+
+        self.init_loss_fn()
+        if use_adam:
+            self.optimizer = torch.optim.Adam(
+                params=self.model.parameters(),
+                lr=self.learning_rate, betas=(0.9, 0.999),
+                eps=1e-08, weight_decay=1e-2, amsgrad=False)
+        else:
+            self.optimizer = pFedIBOptimizer(self.model.parameters(), lr=self.learning_rate)
+        self.lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=self.optimizer, gamma=0.99)
+        self.label_counts = {}
+
+
     def init_loss_fn(self):
         self.loss = nn.NLLLoss()
         self.dist_loss = nn.MSELoss()
@@ -130,8 +175,8 @@ class User:
         test_acc = 0
         loss = 0
         for x, y in self.testloaderfull:
-            x = x.to('cuda:3')
-            y = y.to('cuda:3')
+            x = x.to('cpu')
+            y = y.to('cpu')
             output = self.model(x)['output']
             loss += self.loss(output, y)
             test_acc += (torch.sum(torch.argmax(output, dim=1) == y)).item()

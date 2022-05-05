@@ -5,7 +5,7 @@ import ray
 
 from FLAlgorithms.users.userbase import User
 
-
+@ray.remote
 class UserpFedGen(User):
     def __init__(self,
                  args, id, model, generative_model,
@@ -18,6 +18,30 @@ class UserpFedGen(User):
         self.latent_layer_idx = latent_layer_idx
         self.available_labels = available_labels
         self.label_info = label_info
+
+    def _update(self,
+               args, id, model, generative_model,
+               train_data, test_data,
+               available_labels, latent_layer_idx, label_info,
+               use_adam=False):
+        super().update(args, id, model, train_data, test_data, use_adam=use_adam)
+        self.gen_batch_size = args.gen_batch_size
+        self.generative_model = generative_model
+        self.latent_layer_idx = latent_layer_idx
+        self.available_labels = available_labels
+        self.label_info = label_info
+
+    def _get_model(self):
+        return self.model
+
+    def _get_label_counts(self):
+        return self.label_counts
+
+    def _get_id(self):
+        return self.id
+
+    def _get_train_samples(self):
+        return self.train_samples
 
     def exp_lr_scheduler(self, epoch, decay=0.98, init_lr=0.1, lr_decay_epoch=1):
         """Decay learning rate by a factor of 0.95 every lr_decay_epoch epochs."""
@@ -44,7 +68,7 @@ class UserpFedGen(User):
                 #### sample from real dataset (un-weighted)
                 samples = self.get_next_train_batch(count_labels=True)
                 X, y = samples['X'], samples['y']
-                X, y = X.to('cuda:3'), y.to('cuda:3')
+                X, y = X.to('cpu'), y.to('cpu')
                 self.update_label_counts(samples['labels'], samples['counts'])
                 model_result = self.model(X, logit=True)
                 user_output_logp = model_result['output']
@@ -66,7 +90,7 @@ class UserpFedGen(User):
                     gen_output = gen_result['output']  # latent representation when latent = True, x otherwise
                     user_output_logp = self.model(gen_output, start_layer_idx=self.latent_layer_idx)['output']
                     teacher_loss = generative_alpha * torch.mean(
-                        self.generative_model.crossentropy_loss(user_output_logp, sampled_y.to('cuda:3'))
+                        self.generative_model.crossentropy_loss(user_output_logp, sampled_y.to('cpu'))
                     )
                     # this is to further balance oversampled down-sampled synthetic data
                     gen_ratio = self.gen_batch_size / self.batch_size
