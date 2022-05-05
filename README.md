@@ -1,5 +1,5 @@
 # CSE812_Project_Group2
-## Group Member
+## Group Members
 Samiul Alam, Hongzhi Wen, Jun Guo
 
 ## Project Abstract
