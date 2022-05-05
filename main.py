@@ -3,10 +3,6 @@ import argparse
 
 import torch
 
-from FLAlgorithms.servers.serverFedDistill import FedDistill
-from FLAlgorithms.servers.serverFedProx import FedProx
-from FLAlgorithms.servers.serveravg import FedAvg
-from FLAlgorithms.servers.serverpFedEnsemble import FedEnsemble
 from FLAlgorithms.servers.serverpFedGen import FedGen
 from utils.model_utils import create_model
 
@@ -14,19 +10,7 @@ from utils.model_utils import create_model
 def create_server_n_user(args, i):
     model = create_model(args.model, args.dataset, args.algorithm)
     model[0].to('cpu')
-    if 'FedAvg' in args.algorithm:
-        server = FedAvg(args, model, i)
-    elif 'FedGen' in args.algorithm:
-        server = FedGen(args, model, i)
-    elif ('FedProx' in args.algorithm):
-        server = FedProx(args, model, i)
-    elif ('FedDistill' in args.algorithm):
-        server = FedDistill(args, model, i)
-    elif ('FedEnsemble' in args.algorithm):
-        server = FedEnsemble(args, model, i)
-    else:
-        print("Algorithm {} has not been implemented.".format(args.algorithm))
-        exit()
+    server = FedGen(args, model, i)
     return server
 
 
