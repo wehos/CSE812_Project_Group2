@@ -12,7 +12,7 @@ pip3 install -r requirements.txt
 python main.py --dataset Mnist-alpha0.1-ratio0.5 --algorithm FedGen --batch_size 32 --num_glob_iters 200 --local_epochs 20 --num_users 10 --lamda 1 --learning_rate 0.01 --model cnn --personal_learning_rate 0.01 --times 3 
 
 ## Experiment Settings
-To modify the experiment settings, please edit `utils.model_config.py` file, where `'mnist_0'` and `''mnist_1''` are configs for user models.
+To modify the experiment settings, please edit `utils.model_config.py` file, where `'mnist_0'` and `'mnist_1'` are configs for user models.
 
 ## Acknowledgement
 This source code is based on the official implementation of FedGen (https://github.com/zhuangdizhu/FedGen).
